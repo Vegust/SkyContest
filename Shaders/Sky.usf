@@ -1,0 +1,97 @@
+#include "/Engine/Public/Platform.ush"
+
+#define MATH_PI 3.1415926535f
+#define MATH_E 2.7182818284f
+
+// Color wavelenth peaks in meters
+// used in scatttering coefficient calculation
+#define WAVELENGTH_R 0.000000680f
+#define WAVELENGTH_G 0.000000550f
+#define WAVELENGTH_B 0.000000440f
+
+// Radius of the Earth and the Earth atmosphere in meters
+#define RADIUS_EARTH 6360000f
+#define RADIUS_EARTH_ATMOSPHERE 6420000f
+
+// air density at sea level (0 height) at 101.325 kPa and 20C. Is in kg/cubic meter
+#define AIR_DENSITY_0 1.225f
+
+// Constants for Rayleigh scattering
+// RELE_BS_0 (scattering coefficient) is in 1/meters, different for 3 color peaks
+// RELE_H_0 (scale height) is in meters
+// RELE_BA_0 (absorbtion coefficient) for atmosphere assumed to be zero
+// Therefore RELE_BE_0 (extinction coefficient) equals to scattering coefficient for atmosphere
+// Atmosphere is not anisotropic therefore RELE_G is zero?
+#define RELE_BS_0_R 0.0000058f
+#define RELE_BS_0_G 0.0000135f
+#define RELE_BS_0_B 0.0000331f
+#define RELE_BE_0_R RELE_BS_0_R
+#define RELE_BE_0_G RELE_BS_0_G
+#define RELE_BE_0_B RELE_BS_0_B
+#define RELE_H_0 8000f
+
+// Constants for Mie scattering
+// MIE_B_0 (scattering coefficient) is in 1/meters, for all color peaks
+// MIE_H_0 (scale height) is in meters
+// MIE_G (anisotropy) is unitless?
+#define MIE_BS_0 0.00210f
+#define MIE_BA_0 (1.1*MIE_BS_0)
+#define MIE_BE_0 (MIE_BS_0+MIE_BA_0)
+#define MIE_H_0 = 1200f
+#define MIE_G 0.76f
+
+struct SkyFunctions
+{
+	static float PhaseFunction_Rayleigh(float cos_tau)
+	{
+		// PhaseFunction_Mie but with g=0
+		float cos_tau_squared = pow(cos_tau,2.f);
+		return 3.f/(16.f*MATH_PI)*(1.f+cos_tau_squared);
+	}
+
+	static float PhaseFunction_Mie(float cos_tau)
+	{
+		float cos_tau_squared = pow(cos_tau,2.f);
+		float g_squared = pow(MIE_G,2.f);
+		float numerator = (1.f-g_squared)*(1+cos_tau_squared);
+		float denominator = (2.f+g_squared)*pow((1.f+g_squared-2.f*MIE_G*cos_tau),1.5f);
+		return 3.f/(8.f*MATH_PI)*numerator/denominator;
+	}
+
+	static float AtmosphereDensity(float height, float scale_height)
+	{
+		return AIR_DENSITY_0*pow(MATH_E,(-height/scale_height));
+	}
+
+	static float3 SkyColor(float3 SkyPos, float3 PixelPos)
+	{
+		float cos_tau = CosTau(SkyPos, PixelPos);
+
+		
+		
+
+		return float3(cos_tau,cos_tau,cos_tau);
+	}
+	
+	static float CosTau(float3 SkyPos, float3 PixelPos)
+	{
+		return dot(normalize(SkyPos),normalize(PixelPos));
+	}
+
+	// Map sqare UV texture to half sphere position
+	static float3 UVToPixelPos(float2 UV)
+	{
+		float RadX = UV.x*2*MATH_PI;
+		float RadY = (1.f - UV.y)*MATH_PI/2.f; // invert because pos increases up and uv decreases up
+		return float3(sin(RadY)*cos(RadX), sin(RadY)*sin(RadX), cos(RadY));
+	}
+
+	// Map half sphere position to sqare UV texture 
+	static float2 PixelPosToUV(float3 PixelPos)
+	{
+		PixelPos = normalize(PixelPos);
+		float Yaw = atan2(-PixelPos.y,-PixelPos.x) + MATH_PI; // negative so Yaw (x,y) quadrant is the same as if picking from world position
+		float Pitch = asin(PixelPos.z);
+		return float2(Yaw/(2.f*MATH_PI),Pitch*2.f/MATH_PI);
+	}
+};
